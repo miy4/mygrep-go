@@ -22,6 +22,10 @@ To get started with mygrep-go, follow these steps:
 1. Build the application: `go build`
 1. Run the application: `./mygrep pattern file`
 
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+
 ## Acknowledgement
 
 I would like to acknowledge the following resources that have been instrumental in the development of this project:
