@@ -3,6 +3,7 @@ package re
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -57,6 +58,8 @@ func (p *parser) parseRe() error {
 	switch nextRune {
 	case EOF:
 		return nil
+	case '[':
+		err = p.parsePositiveSet()
 	case '\\':
 		err = p.parseMetaChar()
 	default:
@@ -104,6 +107,54 @@ func (p *parser) parseMetaChar() error {
 	}
 
 	p.tokens = append(p.tokens, token)
+	return nil
+}
+
+// parsePositiveSet parses a positive set from the input string. It expects the input to start with '[' and contain a closing ']'.
+// It reads runes from the input string and appends them to the setItems slice. If a range (e.g., 'a-z') is detected, it handles it appropriately.
+// If the input string ends unexpectedly or if the set is not properly closed, it returns an error.
+func (p *parser) parsePositiveSet() error {
+	if p.next() != '[' {
+		return errors.New("expected '[' at the beginning of positive set")
+	} else if !strings.ContainsRune(p.regexp[p.pos:], ']') {
+		return errors.New("unclosed '[' in positive set")
+	}
+
+	var previousChar rune
+	setItems := make([]rune, 0)
+	for currentChar := p.next(); currentChar != ']'; currentChar = p.next() {
+		if currentChar == EOF {
+			return errors.New("unexpected EOF while parsing positive set")
+		}
+
+		if currentChar == '-' && previousChar != 0 {
+			rangeStart := previousChar
+			rangeEnd := p.next()
+			if rangeEnd == EOF {
+				return errors.New("unexpected EOF while parsing range in positive set")
+			} else if rangeEnd == ']' {
+				setItems = append(setItems, previousChar, '-')
+				break
+			}
+
+			if rangeStart > rangeEnd {
+				return fmt.Errorf("invalid range: %c-%c", rangeStart, rangeEnd)
+			}
+
+			for ch := rangeStart; ch <= rangeEnd; ch++ {
+				setItems = append(setItems, ch)
+			}
+			previousChar = 0
+		} else {
+			setItems = append(setItems, currentChar)
+			previousChar = currentChar
+		}
+	}
+
+	if len(setItems) == 0 {
+		return errors.New("empty positive set")
+	}
+	p.tokens = append(p.tokens, positiveSetToken{setItems})
 	return nil
 }
 
@@ -155,6 +206,21 @@ func (t wordToken) toNfa() *nfa {
 		start.edges[r] = []*state{end}
 	}
 	start.edges['_'] = []*state{end}
+	return &nfa{start, end}
+}
+
+// positiveSetToken represents a positive character set token.
+type positiveSetToken struct {
+	setItems []rune
+}
+
+// toNfa converts the positive set token to an NFA.
+func (t positiveSetToken) toNfa() *nfa {
+	start := &state{edges: make(map[rune][]*state)}
+	end := &state{isFinal: true}
+	for _, r := range t.setItems {
+		start.edges[r] = []*state{end}
+	}
 	return &nfa{start, end}
 }
 

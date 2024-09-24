@@ -30,6 +30,15 @@ func TestMatch(t *testing.T) {
 		{"foo101", "\\w", true, nil, false},
 		{"$!?", "\\w", false, nil, false},
 		{"a", "\\@", false, errors.New("unsupported meta character: \\@"), true},
+		{"apple", "[abc]", true, nil, false},
+		{"dog", "[abc]", false, nil, false},
+		{"a", "[a-c]", true, nil, false},
+		{"b", "[a-c]", true, nil, false},
+		{"d", "[a-c]", false, nil, false},
+		{"a", "[c-a]", false, errors.New("invalid range: c-a"), true},
+		{"a", "[a-]", true, nil, false},
+		{"b", "[a-]", false, nil, false},
+		{"-", "[a-]", true, nil, false},
 	}
 
 	for _, tt := range tests {
