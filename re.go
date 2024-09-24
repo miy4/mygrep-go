@@ -97,6 +97,8 @@ func (p *parser) parseMetaChar() error {
 	switch nextChar {
 	case 'd':
 		token = digitToken{}
+	case 'w':
+		token = wordToken{}
 	default:
 		return fmt.Errorf("unsupported meta character: \\%c", nextChar)
 	}
@@ -133,6 +135,26 @@ func (t digitToken) toNfa() *nfa {
 	for r := '0'; r <= '9'; r++ {
 		start.edges[r] = []*state{end}
 	}
+	return &nfa{start, end}
+}
+
+// wordToken represents an alphanumeric character token.
+type wordToken struct{}
+
+// toNfa converts the word token to an NFA.
+func (t wordToken) toNfa() *nfa {
+	start := &state{edges: make(map[rune][]*state)}
+	end := &state{isFinal: true}
+	for r := 'a'; r <= 'z'; r++ {
+		start.edges[r] = []*state{end}
+	}
+	for r := 'A'; r <= 'Z'; r++ {
+		start.edges[r] = []*state{end}
+	}
+	for r := '0'; r <= '9'; r++ {
+		start.edges[r] = []*state{end}
+	}
+	start.edges['_'] = []*state{end}
 	return &nfa{start, end}
 }
 
