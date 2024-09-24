@@ -24,23 +24,31 @@ type cli struct {
 
 // run executes the command.
 func (c *cli) run(args []string) int {
+	if len(args) < 1 {
+		fmt.Fprintln(c.err, "Usage: mygrep PATTERN [FILE]")
+		return EXIT_ERROR
+	}
+
 	pattern := args[0]
 	containsMatch := false
-	reader := bufio.NewReader(c.in)
+	scanner := bufio.NewScanner(c.in)
 	for {
-		line, err := reader.ReadString('\n')
-		if err != nil && err != io.EOF {
-			fmt.Fprintf(c.err, "Failed to read input: %v\n", err)
-			return EXIT_ERROR
+		if !scanner.Scan() {
+			if err := scanner.Err(); err != nil {
+				fmt.Fprintf(c.err, "Failed to read input: %v\n", err)
+				return EXIT_ERROR
+			}
+			break
 		}
 
-		if re.Match(line, pattern) {
+		line := scanner.Text()
+		ok, err := re.Match(line, pattern)
+		if err != nil {
+			fmt.Fprintf(c.err, "Failed to match: %v\n", err)
+			return EXIT_ERROR
+		} else if ok {
 			containsMatch = true
 			fmt.Fprintln(c.out, line)
-		}
-
-		if err == io.EOF {
-			break
 		}
 	}
 
