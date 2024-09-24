@@ -15,6 +15,11 @@ func TestMatch(t *testing.T) {
 		{"b", "a", false, nil},
 		{"", "a", false, nil},
 		{"a", "", true, nil},
+		{"3", "d", false, nil},
+		{"3", "\\d", true, nil},
+		{"d", "\\d", false, nil},
+		{"apple123", "\\d", true, nil},
+		{"altern8", "altern\\d", true, nil},
 	}
 
 	for _, tt := range tests {

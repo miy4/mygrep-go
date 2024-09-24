@@ -2,6 +2,7 @@ package re
 
 import (
 	"errors"
+	"fmt"
 	"unicode/utf8"
 )
 
@@ -51,14 +52,19 @@ func (p *parser) parse() error {
 // parseRe processes the regular expression string by parsing individual characters.
 // It returns an error if any part of the regular expression is invalid or if an unexpected EOF is encountered.
 func (p *parser) parseRe() error {
-	r, _ := p.peek()
-	if r == EOF {
+	var err error
+	nextRune, _ := p.peek()
+	switch nextRune {
+	case EOF:
 		return nil
-	} else {
-		err := p.parseLiteral()
-		if err != nil {
-			return err
-		}
+	case '\\':
+		err = p.parseMetaChar()
+	default:
+		err = p.parseLiteral()
+	}
+
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -73,6 +79,28 @@ func (p *parser) parseLiteral() error {
 	}
 
 	token := literalToken{char: r}
+	p.tokens = append(p.tokens, token)
+	return nil
+}
+
+// parseMetaChar reads the next rune from the input string and appends it as a meta character token to the tokens slice.
+// If the end of the input string is reached, it returns an error indicating an unexpected EOF.
+// If the meta character is not supported, it returns an error.
+func (p *parser) parseMetaChar() error {
+	nextChar := p.next()
+	if nextChar == EOF {
+		return errors.New("unexpected EOF while parsing meta character")
+	}
+
+	var token token
+	nextChar = p.next()
+	switch nextChar {
+	case 'd':
+		token = digitToken{}
+	default:
+		return fmt.Errorf("unsupported meta character: \\%c", nextChar)
+	}
+
 	p.tokens = append(p.tokens, token)
 	return nil
 }
@@ -92,6 +120,19 @@ func (t literalToken) toNfa() *nfa {
 	start := &state{edges: make(map[rune][]*state)}
 	end := &state{isFinal: true}
 	start.edges[t.char] = []*state{end}
+	return &nfa{start, end}
+}
+
+// digitToken represents a digit token.
+type digitToken struct{}
+
+// toNfa converts the digit token to an NFA.
+func (t digitToken) toNfa() *nfa {
+	start := &state{edges: make(map[rune][]*state)}
+	end := &state{isFinal: true}
+	for r := '0'; r <= '9'; r++ {
+		start.edges[r] = []*state{end}
+	}
 	return &nfa{start, end}
 }
 
