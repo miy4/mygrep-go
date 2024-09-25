@@ -67,6 +67,8 @@ func (p *parser) parseRe() error {
 		} else {
 			err = p.parsePositiveSet()
 		}
+	case '+':
+		err = p.parsePlus()
 	case '^':
 		err = p.parseBeginningOfString()
 	case '$':
@@ -243,6 +245,21 @@ func (p *parser) parseEndOfString() error {
 	return nil
 }
 
+// parsePlus parses the one or more quantifier '+' from the input string.
+func (p *parser) parsePlus() error {
+	if p.next() != '+' {
+		return errors.New("expected '+' after character")
+	} else if len(p.tokens) == 0 {
+		return errors.New("no character to apply '+' to")
+	}
+
+	lastToken := p.tokens[len(p.tokens)-1]
+	p.tokens = p.tokens[:len(p.tokens)-1]
+	token := plusToken{payload: lastToken}
+	p.tokens = append(p.tokens, token)
+	return nil
+}
+
 // token represents a regular expression token.
 type token interface {
 	toNfa() *nfa
@@ -346,6 +363,18 @@ func (t endOfStringToken) toNfa() *nfa {
 	end := &state{isFinal: true}
 	start.control[EOS] = []*state{end}
 	return &nfa{start, end}
+}
+
+// plusToken represents an one or more quantifier token.
+type plusToken struct {
+	payload token
+}
+
+// toNfa converts the plus token to an NFA.
+func (t plusToken) toNfa() *nfa {
+	nfa := t.payload.toNfa()
+	nfa.end.epsilon = append(nfa.end.epsilon, nfa.start)
+	return nfa
 }
 
 // state represents a state in the NFA.
