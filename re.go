@@ -54,12 +54,17 @@ func (p *parser) parse() error {
 // It returns an error if any part of the regular expression is invalid or if an unexpected EOF is encountered.
 func (p *parser) parseRe() error {
 	var err error
-	nextRune, _ := p.peek()
+	nextRune, runeSize := p.peek()
 	switch nextRune {
 	case EOF:
 		return nil
 	case '[':
-		err = p.parsePositiveSet()
+		nextNextRune, _ := utf8.DecodeRuneInString(p.regexp[p.pos+runeSize:])
+		if nextNextRune == '^' {
+			err = p.parseNegativeSet()
+		} else {
+			err = p.parsePositiveSet()
+		}
 	case '\\':
 		err = p.parseMetaChar()
 	default:
@@ -158,6 +163,56 @@ func (p *parser) parsePositiveSet() error {
 	return nil
 }
 
+// parseNegativeSet parses a negative set from the input string. It expects the input to start with '[^' and contain a closing ']'.
+// It reads runes from the input string and appends them to the setItems slice. If a range (e.g., 'a-z') is detected, it handles it appropriately.
+// If the input string ends unexpectedly or if the set is not properly closed, it returns an error.
+func (p *parser) parseNegativeSet() error {
+	if p.next() != '[' || p.next() != '^' {
+		return errors.New("expected '[^' at the beginning of negative set")
+	} else if !strings.ContainsRune(p.regexp[p.pos:], ']') {
+		return errors.New("unclosed '[' in negative set")
+	}
+
+	var previousChar rune
+	setItems := make([]rune, 0)
+	for currentChar := p.next(); currentChar != ']'; currentChar = p.next() {
+		if currentChar == EOF {
+			return errors.New("unexpected EOF while parsing negative set")
+		}
+
+		if currentChar == '-' && previousChar != 0 {
+			rangeStart := previousChar
+			rangeEnd := p.next()
+			if rangeEnd == EOF {
+				return errors.New("unexpected EOF while parsing range in negative set")
+			} else if rangeEnd == ']' {
+				setItems = append(setItems, previousChar, '-')
+				break
+			}
+
+			if rangeStart > rangeEnd {
+				return fmt.Errorf("invalid range: %c-%c", rangeStart, rangeEnd)
+			}
+
+			for ch := rangeStart; ch <= rangeEnd; ch++ {
+				setItems = append(setItems, ch)
+			}
+
+			previousChar = 0
+		} else {
+			setItems = append(setItems, currentChar)
+			previousChar = currentChar
+		}
+	}
+
+	if len(setItems) == 0 {
+		return errors.New("empty negative set")
+	}
+
+	p.tokens = append(p.tokens, negativeSetToken{setItems})
+	return nil
+}
+
 // token represents a regular expression token.
 type token interface {
 	toNfa() *nfa
@@ -224,9 +279,27 @@ func (t positiveSetToken) toNfa() *nfa {
 	return &nfa{start, end}
 }
 
+// negativeSetToken represents a negative character set token.
+type negativeSetToken struct {
+	setItems []rune
+}
+
+// toNfa converts the negative set token to an NFA.
+func (t negativeSetToken) toNfa() *nfa {
+	start := &state{edges: make(map[rune][]*state)}
+	end := &state{isFinal: true}
+	deadEnd := &state{}
+	for _, r := range t.setItems {
+		start.edges[r] = []*state{deadEnd}
+	}
+	start.anyChar = []*state{end}
+	return &nfa{start, end}
+}
+
 // state represents a state in the NFA.
 type state struct {
 	edges   map[rune][]*state
+	anyChar []*state
 	epsilon []*state
 	isFinal bool
 }
@@ -258,13 +331,17 @@ func buildNfa(tokens []token) *nfa {
 func (n *nfa) matches(s string) bool {
 	var checkMatch func(state *state, s string) bool
 	checkMatch = func(state *state, s string) bool {
-		if state.isFinal || len(s) == 0 {
+		if state.isFinal {
 			return true
 		}
 
 		r, w := utf8.DecodeRuneInString(s)
 		if st := state.edges[r]; st != nil {
 			if checkMatch(st[0], s[w:]) {
+				return true
+			}
+		} else if state.anyChar != nil {
+			if checkMatch(state.anyChar[0], s[w:]) {
 				return true
 			}
 		}

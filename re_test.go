@@ -39,6 +39,15 @@ func TestMatch(t *testing.T) {
 		{"a", "[a-]", true, nil, false},
 		{"b", "[a-]", false, nil, false},
 		{"-", "[a-]", true, nil, false},
+		{"a", "[^a-c]", false, nil, false},
+		{"b", "[^a-c]", false, nil, false},
+		{"d", "[^a-c]", true, nil, false},
+		{"a", "[^c-a]", false, errors.New("invalid range: c-a"), true},
+		{"a", "[^a-]", false, nil, false},
+		{"b", "[^a-]", true, nil, false},
+		{"-", "[^a-]", false, nil, false},
+		{"dog", "[^abc]", true, nil, false},
+		{"cab", "[^abc]", false, nil, false},
 	}
 
 	for _, tt := range tests {
