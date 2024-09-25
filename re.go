@@ -69,6 +69,8 @@ func (p *parser) parseRe() error {
 		}
 	case '+':
 		err = p.parsePlus()
+	case '?':
+		err = p.parseOptional()
 	case '^':
 		err = p.parseBeginningOfString()
 	case '$':
@@ -260,6 +262,21 @@ func (p *parser) parsePlus() error {
 	return nil
 }
 
+// parseOptional parses the zero or one quantifier '?' from the input string.
+func (p *parser) parseOptional() error {
+	if p.next() != '?' {
+		return errors.New("expected '?' after character")
+	} else if len(p.tokens) == 0 {
+		return errors.New("no character to apply '?' to")
+	}
+
+	lastToken := p.tokens[len(p.tokens)-1]
+	p.tokens = p.tokens[:len(p.tokens)-1]
+	token := optionalToken{payload: lastToken}
+	p.tokens = append(p.tokens, token)
+	return nil
+}
+
 // token represents a regular expression token.
 type token interface {
 	toNfa() *nfa
@@ -390,6 +407,18 @@ type state struct {
 type nfa struct {
 	start *state
 	end   *state
+}
+
+// optionalToken represents a zero or one quantifier token.
+type optionalToken struct {
+	payload token
+}
+
+// toNfa converts the optional token to an NFA.
+func (t optionalToken) toNfa() *nfa {
+	nfa := t.payload.toNfa()
+	nfa.start.epsilon = append(nfa.start.epsilon, nfa.end)
+	return nfa
 }
 
 // buildNfa builds an NFA from the parsed regular expression.
