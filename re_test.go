@@ -48,6 +48,16 @@ func TestMatch(t *testing.T) {
 		{"-", "[^a-]", false, nil, false},
 		{"dog", "[^abc]", true, nil, false},
 		{"cab", "[^abc]", false, nil, false},
+		{"1 apple", "\\d apple", true, nil, false},
+		{"1 orange", "\\d apple", false, nil, false},
+		{"100 apple", "\\d\\d\\d apple", true, nil, false},
+		{"1 apple", "\\d\\d\\d apple", false, nil, false},
+		{"3 dogs", "\\d \\w\\w\\ws", true, nil, false},
+		{"4 cats", "\\d \\w\\w\\ws", true, nil, false},
+		{"1 dog", "\\d \\w\\w\\ws", false, nil, false},
+		{"sally has 3 apples", "\\d apple", true, nil, false},
+		{"sally has 1 orange", "\\d apple", false, nil, false},
+		{"sally has 12 apples", "\\d \\\\d\\\\d apples", false, nil, false},
 	}
 
 	for _, tt := range tests {

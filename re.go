@@ -107,6 +107,8 @@ func (p *parser) parseMetaChar() error {
 		token = digitToken{}
 	case 'w':
 		token = wordToken{}
+	case '\\':
+		token = literalToken{char: '\\'}
 	default:
 		return fmt.Errorf("unsupported meta character: \\%c", nextChar)
 	}
