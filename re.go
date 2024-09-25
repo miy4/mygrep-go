@@ -10,6 +10,7 @@ import (
 
 const EOF = -1     // End of file
 const BOS = '\x02' // Beginning of string
+const EOS = '\x03' // End of string
 
 // parser is a simple regular expression parser.
 type parser struct {
@@ -68,6 +69,8 @@ func (p *parser) parseRe() error {
 		}
 	case '^':
 		err = p.parseBeginningOfString()
+	case '$':
+		err = p.parseEndOfString()
 	case '\\':
 		err = p.parseMetaChar()
 	default:
@@ -229,6 +232,17 @@ func (p *parser) parseBeginningOfString() error {
 	return nil
 }
 
+// parseEndOfString parses the end of string token '$' from the input string.
+func (p *parser) parseEndOfString() error {
+	if p.next() != '$' {
+		return errors.New("expected '$' at the end of string")
+	}
+
+	token := endOfStringToken{}
+	p.tokens = append(p.tokens, token)
+	return nil
+}
+
 // token represents a regular expression token.
 type token interface {
 	toNfa() *nfa
@@ -312,6 +326,28 @@ func (t negativeSetToken) toNfa() *nfa {
 	return &nfa{start, end}
 }
 
+// beginningOfStringToken represents the beginning of string token.
+type beginningOfStringToken struct{}
+
+// toNfa converts the beginning of string token to an NFA.
+func (t beginningOfStringToken) toNfa() *nfa {
+	start := &state{control: make(map[rune][]*state)}
+	end := &state{isFinal: true}
+	start.control[BOS] = []*state{end}
+	return &nfa{start, end}
+}
+
+// endOfStringToken represents the end of string token.
+type endOfStringToken struct{}
+
+// toNfa converts the end of string token to an NFA.
+func (t endOfStringToken) toNfa() *nfa {
+	start := &state{control: make(map[rune][]*state)}
+	end := &state{isFinal: true}
+	start.control[EOS] = []*state{end}
+	return &nfa{start, end}
+}
+
 // state represents a state in the NFA.
 type state struct {
 	edges   map[rune][]*state
@@ -325,17 +361,6 @@ type state struct {
 type nfa struct {
 	start *state
 	end   *state
-}
-
-// beginningOfStringToken represents the beginning of string token.
-type beginningOfStringToken struct{}
-
-// toNfa converts the beginning of string token to an NFA.
-func (t beginningOfStringToken) toNfa() *nfa {
-	start := &state{control: make(map[rune][]*state)}
-	end := &state{isFinal: true}
-	start.control[BOS] = []*state{end}
-	return &nfa{start, end}
 }
 
 // buildNfa builds an NFA from the parsed regular expression.
@@ -397,8 +422,8 @@ func (n *nfa) matches(s string) bool {
 // stringSource prepares the input string for matching by replacing newline characters with the beginning-of-string character.
 // It also prepends the BOS character to the start of the string.
 func stringSource(input string) string {
-	preparedString := strings.ReplaceAll(input, "\n", string(BOS))
-	preparedString = string(BOS) + preparedString
+	preparedString := strings.ReplaceAll(input, "\n", string(EOS)+string(BOS))
+	preparedString = string(BOS) + preparedString + string(EOS)
 	return preparedString
 }
 
