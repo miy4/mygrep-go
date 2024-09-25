@@ -18,8 +18,7 @@ This repository contains a CLI application that implements a part of the `grep` 
 To get started with mygrep-go, follow these steps:
 
 1. Clone the repository: `git clone https://github.com/miy4/mygrep-go.git`
-1. Install the necessary dependencies: `go get -d ./...`
-1. Build the application: `go build`
+1. Build the application: `go build ./cmd/mygrep`
 1. Run the application: `./mygrep pattern file`
 
 ## License
