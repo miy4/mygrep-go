@@ -17,6 +17,7 @@ type parser struct {
 	regexp string
 	pos    int
 	tokens []token
+	done   bool
 }
 
 // peek returns the next rune and its size in the input string without advancing the position.
@@ -43,7 +44,7 @@ func (p *parser) next() rune {
 // parse processes the entire regular expression string, parsing it into its constituent parts.
 // It returns an error if any part of the regular expression is invalid.
 func (p *parser) parse() error {
-	for p.pos < len(p.regexp) {
+	for p.pos < len(p.regexp) && !p.done {
 		err := p.parseRe()
 		if err != nil {
 			return err
@@ -60,6 +61,12 @@ func (p *parser) parseRe() error {
 	switch nextRune {
 	case EOF:
 		return nil
+	case '(':
+		err = p.parseGroup()
+	case ')':
+		err = p.parseClosingGroup()
+	case '|':
+		err = p.parseOr()
 	case '[':
 		nextNextRune, _ := utf8.DecodeRuneInString(p.regexp[p.pos+runeSize:])
 		if nextNextRune == '^' {
@@ -290,6 +297,64 @@ func (p *parser) parseWildcard() error {
 	return nil
 }
 
+// parseGroup parses a group of tokens enclosed in parentheses from the input string.
+// It expects the input to start with '(' and will return an error if it does not.
+// The method creates a new parser instance to parse the group and appends the parsed tokens to the current parser's token list.
+func (p *parser) parseGroup() error {
+	if p.next() != '(' {
+		return errors.New("expected '(' at the beginning of group")
+	}
+
+	groupParser := parser{
+		regexp: p.regexp,
+		pos:    p.pos,
+		tokens: []token{groupToken{payload: [][]token{}}},
+	}
+
+	err := groupParser.parse()
+	if err != nil {
+		return err
+	}
+
+	p.pos = groupParser.pos
+	p.tokens = append(p.tokens, groupParser.tokens...)
+	return nil
+}
+
+// parseOr parses the '|' character from the input string.
+// It expects the input to contain a '|' character and a preceding group of tokens.
+// If the '|' character is not found or if there is no preceding group, it returns an error.
+// The method then appends the tokens following the '|' to the payload of the preceding group token.
+func (p *parser) parseOr() error {
+	if p.next() != '|' {
+		return errors.New("expected '|'")
+	} else if _, ok := p.tokens[0].(groupToken); !ok {
+		return errors.New("expected group before '|'")
+	}
+
+	previousTokens := p.tokens[1:]
+	groupToken := p.tokens[0].(groupToken)
+	groupToken.payload = append(groupToken.payload, previousTokens)
+	p.tokens = []token{groupToken}
+	return nil
+}
+
+// parseClosingGroup parses the closing ')' character from the input string.
+func (p *parser) parseClosingGroup() error {
+	if p.next() != ')' {
+		return errors.New("expected ')'")
+	} else if _, ok := p.tokens[0].(groupToken); !ok {
+		return errors.New("expected group before ')'")
+	}
+
+	previousTokens := p.tokens[1:]
+	groupToken := p.tokens[0].(groupToken)
+	groupToken.payload = append(groupToken.payload, previousTokens)
+	p.tokens = []token{groupToken}
+	p.done = true
+	return nil
+}
+
 // token represents a regular expression token.
 type token interface {
 	toNfa() *nfa
@@ -427,6 +492,36 @@ func (t wildcardToken) toNfa() *nfa {
 	start := &state{}
 	end := &state{isFinal: true}
 	start.anyChar = []*state{end}
+	return &nfa{start, end}
+}
+
+// groupToken represents a group of tokens.
+type groupToken struct {
+	payload [][]token
+}
+
+// toNfa converts the group token to an NFA.
+func (t groupToken) toNfa() *nfa {
+	start := &state{epsilon: []*state{}}
+	end := &state{isFinal: true}
+	for _, tokens := range t.payload {
+		var nfa *nfa
+		for _, token := range tokens {
+			nextNfa := token.toNfa()
+			if nfa == nil {
+				nfa = nextNfa
+			} else {
+				nfa.end.epsilon = append(nfa.end.epsilon, nextNfa.start)
+				nfa.end.isFinal = false
+				nfa.end = nextNfa.end
+			}
+		}
+
+		start.epsilon = append(start.epsilon, nfa.start)
+		nfa.end.epsilon = append(nfa.end.epsilon, end)
+		nfa.end.isFinal = false
+	}
+
 	return &nfa{start, end}
 }
 
