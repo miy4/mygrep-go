@@ -68,6 +68,11 @@ func TestMatch(t *testing.T) {
 		{"dogs", "dogs?", true, nil, false},
 		{"dog", "dogs?", true, nil, false},
 		{"cat", "dogs?", false, nil, false},
+		{"dog", "d.g", true, nil, false},
+		{"dog", "c.g", false, nil, false},
+		{"cat", "c.t", true, nil, false},
+		{"cot", "c.t", true, nil, false},
+		{"car", "c.t", false, nil, false},
 	}
 
 	for _, tt := range tests {

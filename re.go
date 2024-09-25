@@ -71,6 +71,8 @@ func (p *parser) parseRe() error {
 		err = p.parsePlus()
 	case '?':
 		err = p.parseOptional()
+	case '.':
+		err = p.parseWildcard()
 	case '^':
 		err = p.parseBeginningOfString()
 	case '$':
@@ -277,6 +279,17 @@ func (p *parser) parseOptional() error {
 	return nil
 }
 
+// parseWildcard parses the wildcard '.' from the input string.
+func (p *parser) parseWildcard() error {
+	if p.next() != '.' {
+		return errors.New("expected '.'")
+	}
+
+	token := wildcardToken{}
+	p.tokens = append(p.tokens, token)
+	return nil
+}
+
 // token represents a regular expression token.
 type token interface {
 	toNfa() *nfa
@@ -394,6 +407,29 @@ func (t plusToken) toNfa() *nfa {
 	return nfa
 }
 
+// optionalToken represents a zero or one quantifier token.
+type optionalToken struct {
+	payload token
+}
+
+// toNfa converts the optional token to an NFA.
+func (t optionalToken) toNfa() *nfa {
+	nfa := t.payload.toNfa()
+	nfa.start.epsilon = append(nfa.start.epsilon, nfa.end)
+	return nfa
+}
+
+// wildcardToken represents a wildcard token.
+type wildcardToken struct{}
+
+// toNfa converts the wildcard token to an NFA.
+func (t wildcardToken) toNfa() *nfa {
+	start := &state{}
+	end := &state{isFinal: true}
+	start.anyChar = []*state{end}
+	return &nfa{start, end}
+}
+
 // state represents a state in the NFA.
 type state struct {
 	edges   map[rune][]*state
@@ -407,18 +443,6 @@ type state struct {
 type nfa struct {
 	start *state
 	end   *state
-}
-
-// optionalToken represents a zero or one quantifier token.
-type optionalToken struct {
-	payload token
-}
-
-// toNfa converts the optional token to an NFA.
-func (t optionalToken) toNfa() *nfa {
-	nfa := t.payload.toNfa()
-	nfa.start.epsilon = append(nfa.start.epsilon, nfa.end)
-	return nfa
 }
 
 // buildNfa builds an NFA from the parsed regular expression.
