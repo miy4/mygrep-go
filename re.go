@@ -76,6 +76,8 @@ func (p *parser) parseRe() error {
 		}
 	case '+':
 		err = p.parsePlus()
+	case '*':
+		err = p.parseStar()
 	case '?':
 		err = p.parseOptional()
 	case '.':
@@ -267,6 +269,21 @@ func (p *parser) parsePlus() error {
 	lastToken := p.tokens[len(p.tokens)-1]
 	p.tokens = p.tokens[:len(p.tokens)-1]
 	token := plusToken{payload: lastToken}
+	p.tokens = append(p.tokens, token)
+	return nil
+}
+
+// parseStar parses the zero or more quantifier '*' from the input string.
+func (p *parser) parseStar() error {
+	if p.next() != '*' {
+		return errors.New("expected '*' after character")
+	} else if len(p.tokens) == 0 {
+		return errors.New("no character to apply '*' to")
+	}
+
+	lastToken := p.tokens[len(p.tokens)-1]
+	p.tokens = p.tokens[:len(p.tokens)-1]
+	token := starToken{payload: lastToken}
 	p.tokens = append(p.tokens, token)
 	return nil
 }
@@ -469,6 +486,19 @@ type plusToken struct {
 func (t plusToken) toNfa() *nfa {
 	nfa := t.payload.toNfa()
 	nfa.end.epsilon = append(nfa.end.epsilon, nfa.start)
+	return nfa
+}
+
+// starToken represents a zero or more quantifier token.
+type starToken struct {
+	payload token
+}
+
+// toNfa converts the star token to an NFA.
+func (t starToken) toNfa() *nfa {
+	nfa := t.payload.toNfa()
+	nfa.end.epsilon = append(nfa.end.epsilon, nfa.start)
+	nfa.start.epsilon = append(nfa.start.epsilon, nfa.end)
 	return nfa
 }
 
